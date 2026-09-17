@@ -286,9 +286,44 @@
   }
   .raw-box.show{display:block;}
 
+  .geo-btn{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    margin-top:16px;
+    padding:10px 16px;
+    background:var(--panel-2);
+    border:1px solid var(--hair);
+    border-radius:4px;
+    color:var(--text);
+    font-family:var(--sans);
+    font-size:13px;
+    cursor:pointer;
+    transition:border-color .15s ease, background .15s ease;
+  }
+  .geo-btn:hover{ border-color:var(--amber-dim); background:var(--panel); }
+  .geo-btn:disabled{ opacity:0.5; cursor:wait; }
+  .geo-btn svg{ width:16px; height:16px; }
+  .geo-status{
+    margin-top:12px;
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--muted);
+    line-height:1.6;
+  }
+  .geo-status .coord{
+    color:var(--amber);
+    font-weight:500;
+  }
+  .geo-status .error{
+    color:var(--red);
+  }
+
   ::-webkit-scrollbar{width:8px;height:8px;}
   ::-webkit-scrollbar-track{background:var(--panel);}
   ::-webkit-scrollbar-thumb{background:var(--hair);}
+
+  @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -311,6 +346,14 @@
     </div>
     <p id="dzText">Перетащите фотографию сюда или нажмите, чтобы выбрать файл</p>
     <small>JPEG хранит EXIF полностью · PNG и WebP обычно без EXIF</small>
+    <button class="geo-btn" id="geoBtn" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke-linecap="round"/>
+      </svg>
+      Определить моё местоположение
+    </button>
+    <div class="geo-status" id="geoStatus"></div>
   </div>
 
   <div class="sprockets" id="sprocketsBottom"></div>
@@ -343,6 +386,10 @@
   const groupsEl = document.getElementById('groups');
   const dzText = document.getElementById('dzText');
   const resetBtn = document.getElementById('resetBtn');
+  const geoBtn = document.getElementById('geoBtn');
+  const geoStatus = document.getElementById('geoStatus');
+
+  let currentGeo = null; // {lat, lon, accuracy, timestamp}
 
   function sprockets(el, n){
     el.innerHTML = '';
@@ -384,6 +431,101 @@
     fileInput.value = '';
     dzText.textContent = 'Перетащите фотографию сюда или нажмите, чтобы выбрать файл';
   });
+
+  // Geolocation
+  function updateGeoStatus(statusHTML){
+    geoStatus.innerHTML = statusHTML;
+  }
+
+  geoBtn.addEventListener('click', requestGeoLocation);
+
+  function requestGeoLocation(){
+    if(!navigator.geolocation){
+      updateGeoStatus('<span class="error">⚠ Геолокация не поддерживается вашим браузером</span>');
+      return;
+    }
+
+    geoBtn.disabled = true;
+    geoBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="animation: spin 1s linear infinite;">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke-linecap="round"/>
+      </svg>
+      Определение местоположения...`; 
+    updateGeoStatus('');
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+        const accuracy = position.coords.accuracy;
+        const timestamp = new Date(position.timestamp).toLocaleString('ru-RU', {
+          day:'2-digit', month:'2-digit', year:'numeric',
+          hour:'2-digit', minute:'2-digit', second:'2-digit'
+        });
+
+        currentGeo = { lat, lon, accuracy, timestamp };
+
+        updateGeoStatus(`
+          <div>Местоположение определено:</div>
+          <div class="coord">${lat.toFixed(6)}, ${lon.toFixed(6)}</div>
+          <div>Точность: ±${accuracy.toFixed(0)} м</div>
+          <div>Время: ${timestamp}</div>
+          <button class="reset-link" id="clearGeoBtn" style="margin-top:8px;">✕ очистить</button>
+        `);
+
+        geoBtn.disabled = false;
+        geoBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke-linecap="round"/>
+          </svg>
+          Обновить местоположение
+        `;
+
+        document.getElementById('clearGeoBtn').addEventListener('click', (e) => {
+          e.stopPropagation();
+          currentGeo = null;
+          updateGeoStatus('');
+          geoBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke-linecap="round"/>
+            </svg>
+            Определить моё местоположение
+          `;
+        });
+      },
+      (error) => {
+        let msg = 'Не удалось определить местоположение';
+        switch(error.code) {
+          case error.PERMISSION_DENIED:
+            msg = '⚠ Доступ к геолокации запрещён. Разрешите доступ в настройках браузера.';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            msg = '⚠ Информация о местоположении недоступна.';
+            break;
+          case error.TIMEOUT:
+            msg = '⚠ Превышено время ожидания ответа.';
+            break;
+        }
+        updateGeoStatus(`<span class="error">${msg}</span>`);
+        geoBtn.disabled = false;
+        geoBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke-linecap="round"/>
+          </svg>
+          Определить моё местоположение
+        `;
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
+    );
+  }
 
   function formatBytes(bytes){
     if(bytes === 0) return '0 Б';

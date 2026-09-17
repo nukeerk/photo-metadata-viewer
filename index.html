@@ -496,8 +496,8 @@
 
       if(!all || Object.keys(all).length === 0){
         const note = document.createElement('div');
-        note.className = 'empty-note';
-        note.textContent = 'EXIF-данные не найдены в этом файле (часто бывает для PNG, WebP, скриншотов или фото, прошедших через мессенджеры/соцсети).';
+        note.className = 'warn';
+        note.textContent = '⚠ EXIF-данные не найдены в этом файле (часто бывает для PNG, WebP, скриншотов или фото, прошедших через мессенджеры/соцсети). Геоданные требуются в EXIF.';
         groupsEl.appendChild(note);
         return;
       }
@@ -525,15 +525,14 @@
 
       // GPS
       let gpsRows = [];
-      let gpsDebug = [];
-
-      // Собираем сырые теги
-      gpsDebug.push(['GPSLatitude (сырой)', all.GPSLatitude]);
-      gpsDebug.push(['GPSLatitudeRef', all.GPSLatitudeRef]);
-      gpsDebug.push(['GPSLongitude (сырой)', all.GPSLongitude]);
-      gpsDebug.push(['GPSLongitudeRef', all.GPSLongitudeRef]);
-      gpsDebug.push(['GPSAltitude', all.GPSAltitude !== undefined ? all.GPSAltitude + ' м' : null]);
-      gpsDebug.push(['GPSAltitudeRef', all.GPSAltitudeRef !== undefined ? (all.GPSAltitudeRef === 0 ? 'над уровнем моря' : 'ниже уровня моря') : null]);
+      const gpsDebug = [
+        ['GPSLatitude (сырой)', all.GPSLatitude],
+        ['GPSLatitudeRef', all.GPSLatitudeRef],
+        ['GPSLongitude (сырой)', all.GPSLongitude],
+        ['GPSLongitudeRef', all.GPSLongitudeRef],
+        ['GPSAltitude', all.GPSAltitude !== undefined ? all.GPSAltitude + ' м' : null],
+        ['GPSAltitudeRef', all.GPSAltitudeRef !== undefined ? (all.GPSAltitudeRef === 0 ? 'над уровнем моря' : 'ниже уровня моря') : null],
+      ];
 
       if(all.GPSLatitude && all.GPSLongitude){
         const lat = dmsToDecimal(all.GPSLatitude, all.GPSLatitudeRef);
@@ -565,14 +564,19 @@
         }
       }
 
-      // Добавляем отладочную информацию
+      // Добавляем группу геоданных (если есть данные)
+      if(gpsRows.length > 0) {
+        addGroup('Геоданные', gpsRows);
+      }
+
+      // Добавляем отладочную информацию GPS (всегда, даже если пусто)
       const debugG = document.createElement('div');
       debugG.className = 'group';
+      const presentCount = gpsDebug.filter(([k,v]) => v !== undefined && v !== null).length;
       const debugH = document.createElement('h2');
-      debugH.innerHTML = '<span>⚙ Геоданные (отладка)</span><span class="count">' + gpsDebug.filter(([k,v]) => v !== undefined && v !== null).length + '/' + gpsDebug.length + '</span>';
+      debugH.innerHTML = '<span>⚙ Геоданные (отладка)</span><span class="count">' + presentCount + '/' + gpsDebug.length + '</span>';
       debugG.appendChild(debugH);
       gpsDebug.forEach(([k,v])=>{
-        if(v === undefined || v === null || v === '') return;
         const row = document.createElement('div');
         row.className = 'row';
         const kEl = document.createElement('div');
@@ -580,8 +584,13 @@
         kEl.textContent = k;
         const vEl = document.createElement('div');
         vEl.className = 'v';
-        vEl.style.color = 'var(--amber-dim)';
-        vEl.textContent = v;
+        if(v === undefined || v === null || v === '') {
+          vEl.style.color = 'var(--red)';
+          vEl.textContent = '— отсутствует';
+        } else {
+          vEl.style.color = 'var(--amber-dim)';
+          vEl.textContent = v;
+        }
         row.appendChild(kEl);
         row.appendChild(vEl);
         debugG.appendChild(row);
